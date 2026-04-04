@@ -23,6 +23,7 @@ class User extends Authenticatable
         'last_login_at',
         'email_verified_at',
         'phone_verified_at',
+        'fan_id',
     ];
 
     protected $hidden = [
