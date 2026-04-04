@@ -1,0 +1,352 @@
+====================================================
+  AFCON APP — API TEST REQUESTS (cURL)
+  Base URL: http://localhost:8000
+====================================================
+
+NOTE:
+- Replace BASE_URL if deploying to a server
+- Replace TOKEN with the token returned from verify-email or login
+- All requests send/receive JSON
+- password_confirmation must match password
+- OTP is hardcoded as 1234 (until mail is configured)
+
+AUTH FLOW:
+  1. Register         → user created, OTP sent (no token yet)
+  2. Verify Email     → OTP verified, email_verified_at set, token returned
+  3. Login            → blocked until email is verified
+
+
+
+====================================================
+  1. REGISTER
+====================================================
+
+-- Customer --
+curl -X POST http://localhost:8000/api/user/auth/register \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{
+    "name": "Customer User",
+    "email": "customer@test.com",
+    "phone": "+923001234567",
+    "password": "password123",
+    "password_confirmation": "password123",
+    "global_role": "customer"
+  }'
+
+-- Partner --
+curl -X POST http://localhost:8000/api/user/auth/register \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{
+    "name": "Partner User",
+    "email": "partner@test.com",
+    "phone": "+923007654321",
+    "password": "password123",
+    "password_confirmation": "password123",
+    "global_role": "partner"
+  }'
+
+-- Admin --
+curl -X POST http://localhost:8000/api/user/auth/register \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{
+    "name": "Admin User",
+    "email": "admin@test.com",
+    "phone": "+923009999999",
+    "password": "password123",
+    "password_confirmation": "password123",
+    "global_role": "admin"
+  }'
+
+EXPECTED RESPONSE (201) — no token yet:
+{
+  "status": 1,
+  "message": "Registration successful.",
+  "data": {
+    "id": 1,
+    "name": "Customer User",
+    "email": "customer@test.com",
+    "global_role": "customer",
+    "email_verified_at": null,
+    ...
+  }
+}
+
+EXPECTED RESPONSE — duplicate email (422):
+{
+  "status": 0,
+  "message": "The email has already been taken.",
+  "errors": {
+    "email": ["The email has already been taken."]
+  }
+}
+
+EXPECTED RESPONSE — missing global_role (422):
+{
+  "status": 0,
+  "message": "The global role field is required.",
+  "errors": {
+    "global_role": ["The global role field is required."]
+  }
+}
+
+
+
+====================================================
+  2. VERIFY EMAIL (OTP = 1234)
+====================================================
+
+curl -X POST http://localhost:8000/api/user/auth/verify-email \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{
+    "email": "customer@test.com",
+    "otp": "1234"
+  }'
+
+EXPECTED RESPONSE (200) — token returned here:
+{
+  "status": 1,
+  "message": "Email verified successfully.",
+  "data": {
+    "id": 1,
+    "name": "Customer User",
+    "email": "customer@test.com",
+    "email_verified_at": "2026-03-31T22:38:47.000000Z",
+    "global_role": "customer",
+    "is_active": true,
+    "token": "1|xxxxxxxxxxxxxxxxxxxxxxxx"
+  }
+}
+
+EXPECTED RESPONSE — wrong OTP (422):
+{
+  "status": 0,
+  "message": "The otp field is invalid.",
+  "errors": {
+    "otp": ["Invalid or expired OTP."]
+  }
+}
+
+EXPECTED RESPONSE — already verified (422):
+{
+  "status": 0,
+  "message": "The email field is invalid.",
+  "errors": {
+    "email": ["Email is already verified."]
+  }
+}
+
+
+
+====================================================
+  3. LOGIN
+====================================================
+
+curl -X POST http://localhost:8000/api/user/auth/login \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{
+    "email": "customer@test.com",
+    "password": "password123"
+  }'
+
+EXPECTED RESPONSE (200):
+{
+  "status": 1,
+  "message": "Login successful.",
+  "data": {
+    "id": 1,
+    "name": "Customer User",
+    "email": "customer@test.com",
+    "email_verified_at": "2026-03-31T22:38:47.000000Z",
+    "global_role": "customer",
+    "is_active": true,
+    "last_login_at": "2026-03-31T22:42:10.000000Z",
+    "token": "2|xxxxxxxxxxxxxxxxxxxxxxxx"
+  }
+}
+
+EXPECTED RESPONSE — email not verified (422):
+NOTE: A fresh OTP is also generated and sent to the user automatically.
+{
+  "status": 0,
+  "message": "The email field is invalid.",
+  "errors": {
+    "email": ["Email not verified. A new OTP has been sent to your email."]
+  }
+}
+
+EXPECTED RESPONSE — wrong password (422):
+{
+  "status": 0,
+  "message": "The email field is invalid.",
+  "errors": {
+    "email": ["Invalid credentials."]
+  }
+}
+
+
+
+====================================================
+  4. GET CURRENT USER (auth/me)
+====================================================
+
+curl -X GET http://localhost:8000/api/user/auth/me \
+  -H "Accept: application/json" \
+  -H "Authorization: Bearer TOKEN"
+
+EXPECTED RESPONSE (200):
+{
+  "status": 1,
+  "message": "User fetched.",
+  "data": {
+    "id": 1,
+    "name": "Customer User",
+    "email": "customer@test.com",
+    "global_role": "customer",
+    "is_active": true,
+    ...
+  }
+}
+
+EXPECTED RESPONSE — no/invalid token (401):
+{
+  "status": 0,
+  "message": "Unauthenticated."
+}
+
+
+
+====================================================
+  5. GET PROFILE
+====================================================
+
+curl -X GET http://localhost:8000/api/user/profile \
+  -H "Accept: application/json" \
+  -H "Authorization: Bearer TOKEN"
+
+EXPECTED RESPONSE (200):
+{
+  "status": 1,
+  "message": "Profile fetched.",
+  "data": { ... }
+}
+
+
+
+====================================================
+  6. UPDATE PROFILE
+====================================================
+
+curl -X PUT http://localhost:8000/api/user/profile \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -H "Authorization: Bearer TOKEN" \
+  -d '{
+    "name": "Updated Name",
+    "phone": "+923001112233"
+  }'
+
+EXPECTED RESPONSE (200):
+{
+  "status": 1,
+  "message": "Profile updated.",
+  "data": { ... }
+}
+
+
+
+====================================================
+  7. LOGOUT
+====================================================
+
+curl -X POST http://localhost:8000/api/user/auth/logout \
+  -H "Accept: application/json" \
+  -H "Authorization: Bearer TOKEN"
+
+EXPECTED RESPONSE (200):
+{
+  "status": 1,
+  "message": "Logged out successfully.",
+  "data": []
+}
+
+
+
+====================================================
+  8. FORGOT PASSWORD
+====================================================
+
+curl -X POST http://localhost:8000/api/user/auth/forgot-password \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{
+    "email": "customer@test.com"
+  }'
+
+EXPECTED RESPONSE (501):
+{
+  "status": 0,
+  "message": "Not implemented yet."
+}
+NOTE: Will be implemented once mail is configured.
+
+
+
+====================================================
+  9. RESET PASSWORD
+====================================================
+
+curl -X POST http://localhost:8000/api/user/auth/reset-password \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{
+    "email": "customer@test.com",
+    "token": "reset-token-from-email",
+    "password": "newpassword123",
+    "password_confirmation": "newpassword123"
+  }'
+
+EXPECTED RESPONSE (501):
+{
+  "status": 0,
+  "message": "Not implemented yet."
+}
+NOTE: Will be implemented once mail is configured.
+
+
+
+====================================================
+  HEALTH CHECK
+====================================================
+
+curl -X GET http://localhost:8000/api/health
+
+EXPECTED RESPONSE (200):
+{
+  "status": "ok"
+}
+
+
+
+====================================================
+  ROUTE SUMMARY
+====================================================
+
+METHOD  URL                                  AUTH REQUIRED
+------  ---                                  -------------
+POST    /api/user/auth/register              No
+POST    /api/user/auth/verify-email          No
+POST    /api/user/auth/login                 No
+POST    /api/user/auth/forgot-password       No
+POST    /api/user/auth/reset-password        No
+POST    /api/user/auth/logout                Yes (Bearer token)
+GET     /api/user/auth/me                    Yes (Bearer token)
+GET     /api/user/profile                    Yes (Bearer token)
+PUT     /api/user/profile                    Yes (Bearer token)
+GET     /api/health                          No
+
+====================================================
