@@ -5,12 +5,12 @@ namespace App\Services\User;
 use App\Constants\AppConstant;
 use App\Exceptions\EmailNotVerifiedException;
 use App\Models\User;
-use App\Models\UserOtp;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
 class AuthService
 {
+    public function __construct(private OTPService $otpService) {}
 
     public function register(array $data): array
     {
@@ -19,15 +19,14 @@ class AuthService
             'email'               => $data['email'],
             'phone'               => $data['phone'] ?? null,
             'password'            => $data['password'],
-            'registration_source' => $data['registration_source'] ?? 'email',
-            'global_role'         => $data['global_role'],
+            'registration_source' => $data['registration_source'] ?? AppConstant::SOURCE_EMAIL,
+            'global_role'         => $data['global_role'] ?? AppConstant::ROLE_CUSTOMER,
         ]);
 
         $user->refresh();
 
-        $this->generateOtp($user, AppConstant::OTP_TYPE_EMAIL_VERIFICATION);
+        $this->otpService->send($user, AppConstant::OTP_TYPE_EMAIL_VERIFICATION);
 
-        // token is not returned until email is verified
         return $user->toArray();
     }
 
@@ -47,19 +46,8 @@ class AuthService
             ]);
         }
 
-        $record = UserOtp::where('user_id', $user->id)
-            ->where('type', AppConstant::OTP_TYPE_EMAIL_VERIFICATION)
-            ->where('is_used', false)
-            ->latest()
-            ->first();
+        $this->otpService->verify($user, $otp, AppConstant::OTP_TYPE_EMAIL_VERIFICATION);
 
-        if (! $record || ! $record->isValid() || $record->otp !== $otp) {
-            throw ValidationException::withMessages([
-                'otp' => ['Invalid or expired OTP.'],
-            ]);
-        }
-
-        $record->update(['is_used' => true]);
         $user->update(['email_verified_at' => now()]);
         $user->refresh();
 
@@ -79,14 +67,13 @@ class AuthService
         }
 
         if (! $user->email_verified_at) {
-            $this->generateOtp($user, AppConstant::OTP_TYPE_EMAIL_VERIFICATION);
-
+            $this->otpService->send($user, AppConstant::OTP_TYPE_EMAIL_VERIFICATION);
             throw new EmailNotVerifiedException();
         }
 
         if (! $user->is_active) {
             throw ValidationException::withMessages([
-                'email' => ['Account is deactivated.'],
+                'email' => ['Your account has been deactivated. Please contact support.'],
             ]);
         }
 
@@ -99,23 +86,44 @@ class AuthService
 
     public function logout(User $user): void
     {
-        // revoke only the current token used to make this request
         $user->currentAccessToken()->delete();
     }
 
-    private function generateOtp(User $user, string $type): void
+    public function forgotPassword(string $email): void
     {
-        // invalidate any previous unused OTPs of same type
-        UserOtp::where('user_id', $user->id)
-            ->where('type', $type)
-            ->where('is_used', false)
-            ->update(['is_used' => true]);
+        $user = User::where('email', $email)->first();
 
-        UserOtp::create([
-            'user_id'    => $user->id,
-            'otp'        => AppConstant::OTP_HARDCODED,
-            'type'       => $type,
-            'expires_at' => now()->addMinutes(AppConstant::OTP_EXPIRY_MINUTES),
-        ]);
+        // Always return success to prevent email enumeration
+        if ($user && $user->email_verified_at) {
+            $this->otpService->send($user, AppConstant::OTP_TYPE_PASSWORD_RESET);
+        }
+    }
+
+    public function resetPassword(string $email, string $otp, string $newPassword): void
+    {
+        $user = User::where('email', $email)->first();
+
+        if (! $user) {
+            throw ValidationException::withMessages([
+                'email' => ['No account found with this email.'],
+            ]);
+        }
+
+        $this->otpService->verify($user, $otp, AppConstant::OTP_TYPE_PASSWORD_RESET);
+
+        $user->update(['password' => $newPassword]);
+    }
+
+    public function resendOtp(string $email, string $type): void
+    {
+        $user = User::where('email', $email)->first();
+
+        if (! $user) {
+            throw ValidationException::withMessages([
+                'email' => ['No account found with this email.'],
+            ]);
+        }
+
+        $this->otpService->resend($user, $type);
     }
 }

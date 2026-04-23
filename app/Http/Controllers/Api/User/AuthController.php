@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Api\User;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\User\ForgotPasswordRequest;
 use App\Http\Requests\Api\User\LoginRequest;
 use App\Http\Requests\Api\User\RegisterRequest;
+use App\Http\Requests\Api\User\ResetPasswordRequest;
 use App\Http\Requests\Api\User\VerifyEmailRequest;
 use App\Services\User\AuthService;
 use Illuminate\Http\JsonResponse;
@@ -18,7 +20,7 @@ class AuthController extends Controller
     {
         $result = $this->authService->register($request->validated());
 
-        return $this->success('Registration successful.', $result, 201);
+        return $this->success('Registration successful. Please verify your email.', $result, 201);
     }
 
     public function verifyEmail(VerifyEmailRequest $request): JsonResponse
@@ -47,13 +49,33 @@ class AuthController extends Controller
         return $this->success('User fetched.', $request->user());
     }
 
-    public function forgotPassword(): JsonResponse
+    public function forgotPassword(ForgotPasswordRequest $request): JsonResponse
     {
-        return $this->error('Not implemented yet.', 501);
+        $this->authService->forgotPassword($request->email);
+
+        return $this->success('If this email exists, an OTP has been sent.');
     }
 
-    public function resetPassword(): JsonResponse
+    public function resetPassword(ResetPasswordRequest $request): JsonResponse
     {
-        return $this->error('Not implemented yet.', 501);
+        $this->authService->resetPassword(
+            $request->email,
+            $request->otp,
+            $request->password
+        );
+
+        return $this->success('Password reset successfully. Please log in with your new password.');
+    }
+
+    public function resendOtp(Request $request): JsonResponse
+    {
+        $request->validate([
+            'email'   => ['required', 'email'],
+            'purpose' => ['required', 'string', 'in:email_verification,password_reset'],
+        ]);
+
+        $this->authService->resendOtp($request->email, $request->purpose);
+
+        return $this->success('OTP resent successfully.');
     }
 }
