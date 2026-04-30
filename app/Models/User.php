@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Constants\AppConstant;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -15,7 +16,7 @@ class User extends Authenticatable
     use HasApiTokens, HasFactory, Notifiable, SoftDeletes;
 
     protected $fillable = [
-        // Core
+        // Core auth
         'name',
         'email',
         'phone',
@@ -28,34 +29,24 @@ class User extends Authenticatable
         'email_verified_at',
         'phone_verified_at',
 
-        // Fan ID — generated string & application details (applied once)
+        // Fan ID — only the final generated ID lives here.
+        // All identity/document details live in user_immigration_details table.
         'fan_id',
-        'fan_id_full_name',
-        'fan_id_identity_type',
-        'fan_id_identity_number',
-        'fan_id_nationality',
-        'fan_id_date_of_birth',
-        'fan_id_status',
-        'fan_id_rejection_reason',
-        'fan_id_verified_at',
     ];
 
     protected $hidden = [
         'password',
         'remember_token',
-        'fan_id_identity_number',   // sensitive — exclude from default serialisation
     ];
 
     protected function casts(): array
     {
         return [
-            'email_verified_at'   => 'datetime',
-            'phone_verified_at'   => 'datetime',
-            'last_login_at'       => 'datetime',
-            'fan_id_verified_at'  => 'datetime',
-            'fan_id_date_of_birth'=> 'date',
-            'is_active'           => 'boolean',
-            'password'            => 'hashed',
+            'email_verified_at' => 'datetime',
+            'phone_verified_at' => 'datetime',
+            'last_login_at'     => 'datetime',
+            'is_active'         => 'boolean',
+            'password'          => 'hashed',
         ];
     }
 
@@ -81,6 +72,23 @@ class User extends Authenticatable
         return $this->hasMany(ImmigrationLog::class);
     }
 
+    /**
+     * All Fan ID application submissions — includes rejected history.
+     * Use latestImmigrationDetail() to get the active/current one.
+     */
+    public function immigrationDetails(): HasMany
+    {
+        return $this->hasMany(UserImmigrationDetail::class);
+    }
+
+    /**
+     * The most recent Fan ID application (pending or verified).
+     */
+    public function latestImmigrationDetail(): HasOne
+    {
+        return $this->hasOne(UserImmigrationDetail::class)->latestOfMany();
+    }
+
     public function bookings(): HasMany
     {
         return $this->hasMany(Booking::class);
@@ -101,6 +109,13 @@ class User extends Authenticatable
         return $this->belongsTo(AdminRole::class);
     }
 
+    // ── Helpers ────────────────────────────────────────────────────────────────
+
+    public function hasFanId(): bool
+    {
+        return ! empty($this->fan_id);
+    }
+
     public function isAdmin(): bool
     {
         return in_array($this->global_role, ['admin', 'sub_admin']);
@@ -118,22 +133,5 @@ class User extends Authenticatable
         }
 
         return $this->adminRole?->hasPermission($permission) ?? false;
-    }
-
-    // ── Fan ID helpers ─────────────────────────────────────────────────────────
-
-    public function hasFanId(): bool
-    {
-        return $this->fan_id_status === AppConstant::FAN_ID_STATUS_VERIFIED && ! empty($this->fan_id);
-    }
-
-    public function fanIdIsPending(): bool
-    {
-        return $this->fan_id_status === AppConstant::FAN_ID_STATUS_PENDING;
-    }
-
-    public function fanIdIsRejected(): bool
-    {
-        return $this->fan_id_status === AppConstant::FAN_ID_STATUS_REJECTED;
     }
 }

@@ -1,0 +1,569 @@
+{
+  "info": {
+    "name": "AFCON 2027 Ticketing — API",
+    "description": "Complete API test collection for the AFCON 2027 Ticketing platform.\n\n## Quick Start\n1. Import this collection into Postman.\n2. Set the `base_url` collection variable to your server (default: `http://localhost/api`).\n3. Run **Register User** → check email for OTP → run **Verify OTP** (token auto-captured).\n4. All authenticated requests use `{{token}}` which is set automatically.\n\n## Suggested Test Order\n```\n01 Register User\n02 Verify OTP          ← token auto-saved\n03 Login               ← token auto-saved\n04 Apply for Fan ID    ← fan_id returned instantly (IMMIGRATION_SKIP=true)\n05 Get Fan ID Status\n06 Get Announcements\n07 Forgot Password → Reset Password\n08 Logout\n```\n\n## Collection Variables\n| Variable | Default | Description |\n|----------|---------|-------------|\n| `base_url` | `http://localhost/api` | Change to your server URL |\n| `token` | _(auto-filled)_ | Bearer token — set after Login, Verify OTP, or Social Login |",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost/api",
+      "type": "string",
+      "description": "Base API URL. Change this to your server address (e.g. https://yourdomain.com/api)."
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string",
+      "description": "Sanctum Bearer token — auto-captured after Login, Verify OTP, or Social Login."
+    }
+  ],
+  "item": [
+    {
+      "name": "01 · Authentication",
+      "description": "Register, verify email OTP, login, get current user, and logout.\n\n**Flow:** Register → check email for OTP → Verify OTP (token auto-saved) → use authenticated endpoints.",
+      "item": [
+        {
+          "name": "Register — Customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["user", "auth", "register"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ahmed Hassan\",\n  \"email\": \"ahmed.hassan@example.com\",\n  \"phone\": \"+255712345678\",\n  \"password\": \"Secret@123\",\n  \"password_confirmation\": \"Secret@123\",\n  \"global_role\": \"customer\",\n  \"registration_source\": \"mobile\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Register a new user with role `customer`.\n\n**Rules:**\n- `global_role` must be `customer` or `partner` — never `admin` or `sub_admin`\n- `is_active` defaults to `true` automatically\n- An OTP is sent to the email — run **Verify OTP** next\n- `password_confirmation` must match `password`\n- `phone` and `registration_source` are optional\n\n**After this:** Check your email for the 6-digit OTP."
+          },
+          "response": []
+        },
+        {
+          "name": "Register — Partner",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["user", "auth", "register"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Fatima Nkosi\",\n  \"email\": \"fatima.nkosi@example.com\",\n  \"phone\": \"+27821234567\",\n  \"password\": \"Secret@123\",\n  \"password_confirmation\": \"Secret@123\",\n  \"global_role\": \"partner\",\n  \"registration_source\": \"web\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Register a new user with role `partner`. Same rules as customer registration."
+          },
+          "response": []
+        },
+        {
+          "name": "Verify OTP — Email Verification",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data.token) {",
+                  "    pm.collectionVariables.set('token', res.data.token);",
+                  "    console.log('✅ Token captured → {{token}} is ready for authenticated requests');",
+                  "} else {",
+                  "    console.warn('⚠️ Token not found — check OTP value or email address');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/auth/verify-email",
+              "host": ["{{base_url}}"],
+              "path": ["user", "auth", "verify-email"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"ahmed.hassan@example.com\",\n  \"otp\": \"123456\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Submit the 6-digit OTP received by email after registration.\n\n**On success:** Returns user object + Bearer token.\n\n⚡ **Auto-capture:** The Tests script saves the token to `{{token}}` automatically — all authenticated requests are immediately ready.\n\n**Rate-limited:** ~5 attempts per minute.\n**OTP expiry:** 10 minutes. Use **Resend OTP** if expired."
+          },
+          "response": []
+        },
+        {
+          "name": "Resend OTP — Email Verification",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/auth/resend-otp",
+              "host": ["{{base_url}}"],
+              "path": ["user", "auth", "resend-otp"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"ahmed.hassan@example.com\",\n  \"purpose\": \"email_verification\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Resend a fresh OTP when the previous one expired or was not received.\n\n**`purpose` values:**\n- `email_verification` — for new account verification after registration\n- `password_reset` — for the forgot-password flow"
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data.token) {",
+                  "    pm.collectionVariables.set('token', res.data.token);",
+                  "    console.log('✅ Token captured → {{token}} is ready');",
+                  "} else {",
+                  "    console.warn('⚠️ Login failed — email may not be verified yet. Run Verify OTP first.');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["user", "auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"ahmed.hassan@example.com\",\n  \"password\": \"Secret@123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Login with email and password.\n\n**Requires:** Email must be verified first (OTP step).\n\n**Returns:** User object + Bearer token.\n\n⚡ **Auto-capture:** Token is automatically saved to `{{token}}` on success."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Current User (me)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/auth/me",
+              "host": ["{{base_url}}"],
+              "path": ["user", "auth", "me"]
+            },
+            "description": "Returns the authenticated user's core account data.\n\n🔒 **Requires:** Bearer token."
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["user", "auth", "logout"]
+            },
+            "description": "Invalidates the current Bearer token (deletes the Sanctum token from the database).\n\n🔒 **Requires:** Bearer token."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "02 · Social Login",
+      "description": "Sign in with Google or Apple — no OTP verification required.\n\nThe mobile client completes OAuth on-device and sends only the `id_token` here. The backend verifies it, then finds or creates the user automatically.\n\n## Account matching logic\n| Case | Result |\n|------|--------|\n| New user, first social login | New account created, email auto-verified, `is_active = true` |\n| Same social account logs in again | Same user returned (matched via `social_accounts` table) |\n| Email-registered user logs in via social (same email) | Social account linked to existing user, email auto-verified |\n| Google user tries Apple with same email | Apple linked to same user — both providers work |\n| Deactivated account | Blocked with 422 error |\n\nLookup order: `(provider, provider_user_id)` first → then by `email`.",
+      "item": [
+        {
+          "name": "Social Login — Google",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data.token) {",
+                  "    pm.collectionVariables.set('token', res.data.token);",
+                  "    console.log('✅ Google login token captured');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/auth/social",
+              "host": ["{{base_url}}"],
+              "path": ["user", "auth", "social"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider\": \"google\",\n  \"id_token\": \"PASTE_GOOGLE_ID_TOKEN_HERE\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "## How to get a Google ID token for Postman testing\n\n1. Open: https://developers.google.com/oauthplayground\n2. Click ⚙️ gear icon → enable **Use your own OAuth credentials** → enter `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` from `.env`\n3. In Step 1, select scope: `https://www.googleapis.com/auth/userinfo.email`\n4. Click **Authorize APIs** → sign in with your Google account\n5. In Step 2, click **Exchange authorization code for tokens**\n6. Copy the `id_token` from the response (long JWT string)\n7. Paste it as `id_token` in this request body\n\n> **Dev shortcut:** `GOOGLE_CLIENT_ID` is empty in `.env`, so audience validation is skipped. Any valid Google `id_token` works regardless of which app issued it.\n\n⚡ Token is auto-saved to `{{token}}` on success."
+          },
+          "response": []
+        },
+        {
+          "name": "Social Login — Apple (Test Token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data.token) {",
+                  "    pm.collectionVariables.set('token', res.data.token);",
+                  "    console.log('✅ Apple login token captured');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/auth/social",
+              "host": ["{{base_url}}"],
+              "path": ["user", "auth", "social"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider\": \"apple\",\n  \"id_token\": \"eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QxMjMifQ.eyJpc3MiOiJodHRwczovL2FwcGxlaWQuYXBwbGUuY29tIiwic3ViIjoiMDAwMDAwLnRlc3RhcHBsZXVzZXIxMjMuYWJjIiwiZW1haWwiOiJhcHBsZXRlc3RAZXhhbXBsZS5jb20iLCJuYW1lIjoiQXBwbGUgVGVzdCBVc2VyIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsImV4cCI6MTgwODYxMTgzNSwiaWF0IjoxNzc3MDc1ODM1fQ.ZmFrZXNpZ25hdHVyZQ\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "## Why this test token works\n\nThe backend checks Apple tokens for:\n- ✅ 3-part JWT format\n- ✅ `exp` not expired (valid until April 2027)\n- ✅ `iss` = `https://appleid.apple.com`\n- ✅ `sub` and `email` present\n- ❌ **Signature NOT verified** (noted in source code — safe for dev/staging)\n\n## Test token payload\n```json\n{\n  \"iss\": \"https://appleid.apple.com\",\n  \"sub\": \"000000.testappleuser123.abc\",\n  \"email\": \"appletest@example.com\",\n  \"name\": \"Apple Test User\",\n  \"exp\": 1808611835\n}\n```\nToken email: `appletest@example.com`\n\n## Generate a custom test token (different email)\nRun in terminal:\n```bash\nnode -e \"\nconst h = Buffer.from(JSON.stringify({alg:'RS256',kid:'test'})).toString('base64url');\nconst p = Buffer.from(JSON.stringify({\n  iss:'https://appleid.apple.com',\n  sub:'000000.customuser.abc',\n  email:'YOUR@email.com',\n  name:'Your Name',\n  email_verified:true,\n  exp:Math.floor(Date.now()/1000)+3600,\n  iat:Math.floor(Date.now()/1000)\n})).toString('base64url');\nconsole.log(h+'.'+p+'.'+Buffer.from('fakesig').toString('base64url'));\n\"\n```\n\n⚡ Token is auto-saved to `{{token}}` on success."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "03 · Password Management",
+      "description": "Forgot password and reset password via OTP email.\n\n**Flow:** Forgot Password → check email for OTP → Reset Password → Login with new password.",
+      "item": [
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/auth/forgot-password",
+              "host": ["{{base_url}}"],
+              "path": ["user", "auth", "forgot-password"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"ahmed.hassan@example.com\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Sends a 6-digit password-reset OTP to the provided email.\n\n**Security:** Always returns a success message — even if the email does not exist. This prevents email enumeration attacks.\n\nOTP is only sent if the email exists and is verified. After this, run **Reset Password** with the received OTP."
+          },
+          "response": []
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/auth/reset-password",
+              "host": ["{{base_url}}"],
+              "path": ["user", "auth", "reset-password"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"ahmed.hassan@example.com\",\n  \"otp\": \"654321\",\n  \"password\": \"NewSecret@456\",\n  \"password_confirmation\": \"NewSecret@456\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Resets the password using the OTP received via email.\n\n**Fields:**\n- `email` — account email address\n- `otp` — 6-digit code from the email\n- `password` — new password (min 8 characters)\n- `password_confirmation` — must match `password`\n\n**OTP expiry:** 10 minutes (set via `OTP_EXPIRY_MINUTES` in `.env`).\n\nAfter success, login with the new password."
+          },
+          "response": []
+        },
+        {
+          "name": "Resend OTP — Password Reset",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/auth/resend-otp",
+              "host": ["{{base_url}}"],
+              "path": ["user", "auth", "resend-otp"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"ahmed.hassan@example.com\",\n  \"purpose\": \"password_reset\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Resend the password-reset OTP if it expired before use."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "04 · User Profile",
+      "description": "View and update the authenticated user's profile.\n\n🔒 All requests require Bearer token.",
+      "item": [
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/profile",
+              "host": ["{{base_url}}"],
+              "path": ["user", "profile"]
+            },
+            "description": "Returns the authenticated user's full profile.\n\n🔒 **Requires:** Bearer token."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/profile",
+              "host": ["{{base_url}}"],
+              "path": ["user", "profile"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ahmed Hassan Updated\",\n  \"phone\": \"+255712345999\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Update the authenticated user's profile details.\n\n🔒 **Requires:** Bearer token."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "05 · Fan ID Application",
+      "description": "Apply for a Fan ID using identity/travel documents.\n\n## Flow\n```\nPOST /user/fan-id  →  data saved to user_immigration_details table\n                   →  sent to immigration department (TODO: real API)\n                   →  IMMIGRATION_SKIP=true → verified instantly\n                   →  fan_id generated and saved to users.fan_id\n                   →  approval email sent to user\n```\n\n## Identity type codes\n| Code | Who | Document |\n|------|-----|----------|\n| `nic` | Tanzanian citizen | National Identity Card |\n| `rp` | Tanzania resident | Resident Permit |\n| `fn` | Foreign National | Passport (any country) |\n| `special_pass` | Diplomat / media / official | Special Pass |\n\n## Status values\n| Status | Meaning |\n|--------|--------|\n| `pending` | Submitted, awaiting immigration verification |\n| `verified` | Approved — `fan_id` is populated, approval email sent |\n| `rejected` | Not approved — `rejection_reason` set; user may re-apply |\n\n🔒 All requests require Bearer token.",
+      "item": [
+        {
+          "name": "Apply for Fan ID — NIC (Tanzanian Citizen)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/fan-id",
+              "host": ["{{base_url}}"],
+              "path": ["user", "fan-id"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Ahmed Hassan Mohamed\",\n  \"gender\": \"male\",\n  \"date_of_birth\": \"1990-05-15\",\n  \"nationality\": \"TZ\",\n  \"identity_type\": \"nic\",\n  \"identity_number\": \"19900515-12345-00042-6\",\n  \"identity_expiry_date\": \"2030-12-31\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Apply using a **National Identity Card (NIC)** — for Tanzanian citizens.\n\n**Required fields:**\n| Field | Type | Notes |\n|-------|------|-------|\n| `full_name` | string | Full legal name as on document |\n| `gender` | string | `male` or `female` |\n| `date_of_birth` | date `Y-m-d` | Must be a past date |\n| `nationality` | string (2 chars) | ISO 3166-1 alpha-2 (e.g. `TZ`, `NG`, `EG`, `CM`) |\n| `identity_type` | string | `nic` \\| `rp` \\| `fn` \\| `special_pass` |\n| `identity_number` | string | Document number |\n| `identity_expiry_date` | date `Y-m-d` | Must be a **future** date |\n\n**Identity type reference:**\n- `nic` — Tanzanian citizen (National ID Card)\n- `rp` — Tanzania resident (Resident Permit holder)\n- `fn` — Foreign National (passport holder, any country)\n- `special_pass` — Diplomat, media, or official\n\n**Dev mode (IMMIGRATION_SKIP=true):**\nFan ID is generated instantly. Response includes `fan_id` and `status: verified`.\nApproval email is also sent to the user.\n\n**Production mode:**\nStatus will be `pending` — immigration department must approve.\n\n🔒 Requires: Bearer token."
+          },
+          "response": []
+        },
+        {
+          "name": "Apply for Fan ID — FN (Foreign National)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/fan-id",
+              "host": ["{{base_url}}"],
+              "path": ["user", "fan-id"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Karim Benzema\",\n  \"gender\": \"male\",\n  \"date_of_birth\": \"1987-12-19\",\n  \"nationality\": \"MA\",\n  \"identity_type\": \"fn\",\n  \"identity_number\": \"AB1234567\",\n  \"identity_expiry_date\": \"2027-06-30\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Apply as a **Foreign National (FN)** using a passport — for visitors from any country.\n\n`identity_type` is `fn`. `nationality` is the visitor's 2-letter country code.\n\n🔒 Requires: Bearer token."
+          },
+          "response": []
+        },
+        {
+          "name": "Apply for Fan ID — RP (Resident Permit)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/fan-id",
+              "host": ["{{base_url}}"],
+              "path": ["user", "fan-id"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Amina Diallo\",\n  \"gender\": \"female\",\n  \"date_of_birth\": \"1995-03-22\",\n  \"nationality\": \"TZ\",\n  \"identity_type\": \"rp\",\n  \"identity_number\": \"RP-11223344\",\n  \"identity_expiry_date\": \"2028-01-15\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Apply using a **Resident Permit (RP)** — for Tanzania residents who hold a work or residence permit.\n\n`identity_type` is `rp`. Nationality is `TZ` as the permit is issued by Tanzania.\n\n🔒 Requires: Bearer token."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Fan ID Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/user/fan-id",
+              "host": ["{{base_url}}"],
+              "path": ["user", "fan-id"]
+            },
+            "description": "Returns the authenticated user's latest Fan ID application.\n\n**Response includes:**\n- `fan_id` — generated ID string (populated only after verification)\n- `status` — `pending` / `verified` / `rejected`\n- `verified_at` — timestamp when approved\n- `rejection_reason` — reason if rejected (user may re-apply)\n- `submitted_at` — when application was submitted\n- Personal + document details submitted\n- `immigration_logs` — API call history with immigration department\n\n🔒 Requires: Bearer token."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "06 · Announcements",
+      "description": "Public endpoint — no authentication required.\n\nReturns published announcements only. Pinned items appear first.",
+      "item": [
+        {
+          "name": "Get All Announcements",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/announcements",
+              "host": ["{{base_url}}"],
+              "path": ["announcements"]
+            },
+            "description": "Returns all published announcements ordered by: pinned first → newest `published_at`.\n\n**Pagination:** 15 per page by default.\n\n🔓 **Public** — no token required."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Announcements — Filtered",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/announcements?type=info&per_page=10",
+              "host": ["{{base_url}}"],
+              "path": ["announcements"],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "info",
+                  "description": "Filter by type: info | warning | success | danger"
+                },
+                {
+                  "key": "per_page",
+                  "value": "10",
+                  "description": "Items per page (1–100, default 15)"
+                }
+              ]
+            },
+            "description": "Returns published announcements filtered by type.\n\n**`type` options:** `info` · `warning` · `success` · `danger`\n\n**`per_page`:** 1–100 (default 15)\n\n🔓 **Public** — no token required."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "07 · Health Check",
+      "description": "Use to confirm the API server is reachable before testing.",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Returns `{ status: ok, timestamp: ... }`. Use to confirm the server is running.\n\n🔓 **Public** — no token required."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

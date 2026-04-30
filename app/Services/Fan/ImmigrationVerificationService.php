@@ -5,6 +5,7 @@ namespace App\Services\Fan;
 use App\Constants\AppConstant;
 use App\Models\ImmigrationLog;
 use App\Models\User;
+use App\Models\UserImmigrationDetail;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -22,35 +23,51 @@ class ImmigrationVerificationService
     }
 
     /**
-     * Entry point — decides real-time vs. delayed based on config.
+     * Entry point — decides real-time vs. delayed based on .env config.
      *
-     * When IMMIGRATION_SKIP=true (dev mode), bypasses all checks and
-     * returns 'verified' immediately so Fan IDs are issued instantly.
+     * IMMIGRATION_SKIP=true (current dev setting):
+     *   Returns 'verified' instantly. Fan ID is issued on the spot.
+     *   No API call is made. Use this until immigration API credentials are provided.
      *
-     * Returns:
-     *   ['status' => 'verified' | 'pending' | 'rejected', 'message' => '...']
+     * IMMIGRATION_MODE=realtime + IMMIGRATION_API_URL set:
+     *   Calls the live immigration API and processes the response immediately.
+     *
+     * IMMIGRATION_MODE=delayed (or API not configured):
+     *   Stores a log record and returns 'pending'. Admin or a scheduled Artisan
+     *   command processes pending records within 24 h.
+     *
+     * Returns: ['status' => 'verified' | 'pending' | 'rejected', 'message' => '...']
+     *
+     * TODO: Set IMMIGRATION_SKIP=false in .env and configure IMMIGRATION_API_URL /
+     *       IMMIGRATION_API_KEY once the immigration department provides their endpoint.
      */
-    public function verify(User $user): array
+    public function verify(User $user, UserImmigrationDetail $detail): array
     {
         if (config('services.immigration.skip', false)) {
-            Log::info('ImmigrationVerificationService: SKIP mode — auto-verifying', ['user_id' => $user->id]);
+            Log::info('ImmigrationVerificationService: SKIP mode — auto-verifying', [
+                'user_id'   => $user->id,
+                'detail_id' => $detail->id,
+            ]);
 
-            return ['status' => 'verified', 'message' => 'Dev mode: immigration skipped.'];
+            return ['status' => 'verified', 'message' => 'Dev mode: immigration check skipped.'];
         }
 
         if ($this->mode === AppConstant::IMMIGRATION_MODE_REALTIME && $this->apiUrl) {
-            return $this->verifyRealtime($user);
+            return $this->verifyRealtime($user, $detail);
         }
 
-        return $this->queueDelayed($user);
+        return $this->queueDelayed($user, $detail);
     }
 
     /**
-     * REAL-TIME MODE: call the immigration API and process response immediately.
+     * REAL-TIME MODE: call the immigration department API synchronously.
+     *
+     * TODO: Verify the exact endpoint, authentication scheme, request/response format
+     *       with the immigration department before enabling this path in production.
      */
-    private function verifyRealtime(User $user): array
+    private function verifyRealtime(User $user, UserImmigrationDetail $detail): array
     {
-        $payload = $this->buildPayload($user);
+        $payload = $this->buildPayload($detail);
 
         $log = ImmigrationLog::create([
             'user_id'         => $user->id,
@@ -82,33 +99,40 @@ class ImmigrationVerificationService
                 ];
             }
 
-            // API error — fall back to delayed mode
-            Log::warning('Immigration real-time call failed; falling back to delayed', [
-                'user_id' => $user->id, 'http_status' => $response->status(),
+            // Unexpected API response — fall back to delayed mode
+            Log::warning('Immigration real-time call failed, falling back to delayed', [
+                'user_id'     => $user->id,
+                'http_status' => $response->status(),
             ]);
             $log->update(['status' => 'pending', 'notes' => 'Fell back to delayed after API error.']);
 
-            return $this->queueDelayed($user, $log);
+            return $this->queueDelayed($user, $detail, $log);
 
         } catch (\Throwable $e) {
-            Log::error('Immigration API exception', ['user_id' => $user->id, 'error' => $e->getMessage()]);
+            Log::error('Immigration API exception', [
+                'user_id' => $user->id,
+                'error'   => $e->getMessage(),
+            ]);
             $log->update(['status' => 'pending', 'notes' => 'Exception: ' . $e->getMessage()]);
 
-            return $this->queueDelayed($user, $log);
+            return $this->queueDelayed($user, $detail, $log);
         }
     }
 
     /**
-     * DELAYED MODE: persist the request and return pending.
-     * Admin or scheduled artisan command processes within 24 h.
+     * DELAYED MODE: store the verification request and return pending.
+     * Admin panel or a scheduled Artisan command processes the queue within 24 h.
+     *
+     * TODO: Build an Artisan command (e.g. app:process-pending-fan-ids) that loops
+     *       pending UserImmigrationDetail rows, calls processPending(), and marks results.
      */
-    private function queueDelayed(User $user, ?ImmigrationLog $existingLog = null): array
+    private function queueDelayed(User $user, UserImmigrationDetail $detail, ?ImmigrationLog $existingLog = null): array
     {
         if (! $existingLog) {
             ImmigrationLog::create([
                 'user_id'         => $user->id,
                 'mode'            => AppConstant::IMMIGRATION_MODE_DELAYED,
-                'request_payload' => $this->buildPayload($user),
+                'request_payload' => $this->buildPayload($detail),
                 'status'          => 'pending',
             ]);
         }
@@ -120,31 +144,40 @@ class ImmigrationVerificationService
     }
 
     /**
-     * Manually re-trigger verification for a pending user (admin / artisan command).
+     * Re-trigger verification for a specific pending detail record.
+     * Called by admin panel or Artisan command to process delayed queue.
      */
-    public function processPending(User $user): array
+    public function processPending(User $user, UserImmigrationDetail $detail): array
     {
-        if ($user->fan_id_status !== AppConstant::FAN_ID_STATUS_PENDING) {
-            return ['status' => 'not_applicable', 'message' => 'User has no pending Fan ID application.'];
+        if (! $detail->isPending()) {
+            return ['status' => 'not_applicable', 'message' => 'This application is not pending.'];
         }
 
         if ($this->apiUrl) {
-            return $this->verifyRealtime($user);
+            return $this->verifyRealtime($user, $detail);
         }
 
         return ['status' => 'pending', 'message' => 'Immigration API not configured.'];
     }
 
-    private function buildPayload(User $user): array
+    /**
+     * Build the request payload for the immigration department API.
+     *
+     * TODO: Align field names and values with the immigration API specification
+     *       once the department shares their integration documentation.
+     */
+    private function buildPayload(UserImmigrationDetail $detail): array
     {
         return [
-            'user_reference'  => $user->id,
-            'full_name'       => $user->fan_id_full_name,
-            'identity_type'   => $user->fan_id_identity_type,
-            'identity_number' => $user->fan_id_identity_number,
-            'nationality'     => $user->fan_id_nationality,
-            'date_of_birth'   => $user->fan_id_date_of_birth?->format('Y-m-d'),
-            'submitted_at'    => now()->toIso8601String(),
+            'user_reference'        => $detail->user_id,
+            'full_name'             => $detail->full_name,
+            'gender'                => $detail->gender,
+            'date_of_birth'         => $detail->date_of_birth?->format('Y-m-d'),
+            'nationality'           => $detail->nationality,
+            'identity_type'         => $detail->identity_type,
+            'identity_number'       => $detail->identity_number,
+            'identity_expiry_date'  => $detail->identity_expiry_date?->format('Y-m-d'),
+            'submitted_at'          => $detail->submitted_at?->toIso8601String(),
         ];
     }
 }

@@ -15,10 +15,6 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        $this->call([
-            EmailTemplateSeeder::class,
-        ]);
-
         User::factory()->create([
             'name'  => 'Test User',
             'email' => 'test@example.com',

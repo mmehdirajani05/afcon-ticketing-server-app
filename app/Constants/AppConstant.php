@@ -12,12 +12,6 @@ class AppConstant
     const OTP_TYPE_PASSWORD_RESET      = 'password_reset';
     const OTP_TYPE_LOGIN               = 'login';
 
-    // Email template names
-    const EMAIL_TEMPLATE_OTP           = 'otp';
-    const EMAIL_TEMPLATE_RESET_PW      = 'reset_password';
-    const EMAIL_TEMPLATE_BOOKING       = 'booking_confirmed';
-    const EMAIL_TEMPLATE_REFUND        = 'refund_processed';
-
     // Fan ID
     const FAN_ID_PREFIX                = 'AFCON27';
     const FAN_ID_COUNTRY               = 'TZ';
@@ -26,10 +20,10 @@ class AppConstant
     const FAN_ID_STATUS_VERIFIED       = 'verified';
     const FAN_ID_STATUS_REJECTED       = 'rejected';
 
-    const IDENTITY_TYPE_NIC            = 'nic';
-    const IDENTITY_TYPE_PERMIT         = 'permit';
-    const IDENTITY_TYPE_SPECIAL_PASS   = 'special_pass';
-    const IDENTITY_TYPE_VISA           = 'visa';
+    const IDENTITY_TYPE_NIC            = 'nic';           // Tanzanian citizen — National ID Card
+    const IDENTITY_TYPE_RP             = 'rp';            // Tanzania resident — Resident Permit
+    const IDENTITY_TYPE_FN             = 'fn';            // Foreign National — passport holder
+    const IDENTITY_TYPE_SPECIAL_PASS   = 'special_pass';  // Diplomat, media, official
 
     // Immigration
     const IMMIGRATION_MODE_REALTIME    = 'realtime';
