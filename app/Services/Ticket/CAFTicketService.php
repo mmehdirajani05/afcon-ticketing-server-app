@@ -202,7 +202,15 @@ class CAFTicketService
         }
 
         if (str_contains($path, '/confirm')) {
-            return ['status' => 'confirmed', 'caf_ticket_ref' => last(explode('/', $path))];
+            $segments = array_values(array_filter(explode('/', $path)));
+            $refIndex = array_search('tickets', $segments, true);
+            $ref      = ($refIndex !== false && isset($segments[$refIndex + 1])) ? $segments[$refIndex + 1] : null;
+
+            return [
+                'status'         => 'confirmed',
+                'caf_ticket_ref' => $ref,
+                'ticket_pdf_url' => $ref ? ('https://caf.mock/tickets/' . $ref . '.pdf') : null,
+            ];
         }
 
         if (str_contains($path, '/cancel')) {

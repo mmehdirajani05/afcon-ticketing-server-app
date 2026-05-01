@@ -12,6 +12,7 @@ use App\Services\Ticket\CAFTicketService;
 use App\Services\Ticket\DigitalTicketService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 class TicketController extends Controller
 {
@@ -80,10 +81,6 @@ class TicketController extends Controller
             return $this->error('Your Fan ID could not be verified with CAF. ' . ($cafVerification['reason'] ?? ''), 403);
         }
 
-        // Fetch match details for storing in booking
-        $matchData = $this->cafService->getMatches(['match_id' => $request->match_id]);
-        $match     = $matchData['data'][0] ?? [];
-
         // Hold the ticket on CAF
         $cafBooking = $this->cafService->bookTicket(
             $user->fan_id,
@@ -97,16 +94,18 @@ class TicketController extends Controller
             'user_id'          => $user->id,
             'fan_id'           => $user->fan_id,
             'caf_ticket_ref'   => $cafBooking['caf_ticket_ref'],
+            'caf_booking_payload' => $cafBooking,
             'match_id'         => $request->match_id,
-            'match_name'       => ($match['home_team'] ?? '') . ' vs ' . ($match['away_team'] ?? ''),
-            'match_date'       => $match['date'] ?? null,
-            'venue'            => $match['venue'] ?? null,
+            'match_name'       => null,
+            'match_date'       => null,
+            'venue'            => null,
+            'match_city'       => null,
             'ticket_category'  => $request->ticket_category,
             'seat_info'        => $request->seat_info,
-            'amount'           => $match['price'] ?? 0,
-            'currency'         => $match['currency'] ?? 'TZS',
+            'amount'           => 0,
             'payment_status'   => 'pending',
             'booking_status'   => 'pending',
+            'booked_at'        => now(),
         ]);
 
         // Initiate NMB payment
@@ -145,6 +144,10 @@ class TicketController extends Controller
 
         if (! $booking->isPaid()) {
             return $this->error('Ticket is not confirmed yet.', 403);
+        }
+
+        if ($booking->ticket_pdf_url) {
+            return redirect()->away($booking->ticket_pdf_url);
         }
 
         return $this->digitalTicketService->stream($booking);

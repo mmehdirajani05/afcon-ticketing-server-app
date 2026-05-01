@@ -55,7 +55,7 @@
                 @endphp
                 <div class="bg-slate-50 rounded-xl p-3">
                     <p class="text-[10px] text-slate-400 font-medium mb-0.5">Amount</p>
-                    <p class="text-lg font-extrabold text-slate-900">{{ $booking->currency }} {{ number_format($booking->amount, 2) }}</p>
+                    <p class="text-lg font-extrabold text-slate-900">TZS {{ number_format($booking->amount, 2) }}</p>
                 </div>
                 <div class="bg-slate-50 rounded-xl p-3">
                     <p class="text-[10px] text-slate-400 font-medium mb-0.5">Payment Status</p>
@@ -144,7 +144,7 @@
             <h3 class="text-sm font-bold text-slate-800 mb-3">Metadata</h3>
             <div class="flex justify-between"><span class="text-slate-400">Created</span><span class="font-semibold text-slate-700">{{ $booking->created_at->format('d M Y, H:i') }}</span></div>
             <div class="flex justify-between"><span class="text-slate-400">Updated</span><span class="font-semibold text-slate-700">{{ $booking->updated_at->format('d M Y, H:i') }}</span></div>
-            <div class="flex justify-between"><span class="text-slate-400">Currency</span><span class="font-semibold text-slate-700">{{ $booking->currency }}</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Currency</span><span class="font-semibold text-slate-700">TZS</span></div>
         </div>
     </div>
 </div>

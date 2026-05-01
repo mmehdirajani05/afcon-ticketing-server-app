@@ -101,7 +101,7 @@
             </div>
             <div class="match-info-row">
                 <div class="match-info-cell label">Amount Paid</div>
-                <div class="match-info-cell value">{{ $booking->currency }} {{ number_format($booking->amount, 2) }}</div>
+                <div class="match-info-cell value">TZS {{ number_format($booking->amount, 2) }}</div>
             </div>
         </div>
     </div>

@@ -123,7 +123,7 @@
                         @endif
                     </td>
                     <td class="px-5 py-3 text-slate-600 max-w-[180px] truncate">{{ $order->match_name ?? '—' }}</td>
-                    <td class="px-5 py-3 font-semibold text-slate-800">{{ $order->currency }} {{ number_format($order->amount) }}</td>
+                    <td class="px-5 py-3 font-semibold text-slate-800">TZS {{ number_format($order->amount) }}</td>
                     <td class="px-5 py-3">
                         <span class="px-2 py-0.5 rounded-full font-semibold text-[10px] {{ $psc[$order->payment_status] ?? 'text-slate-600 bg-slate-100' }}">
                             {{ ucfirst($order->payment_status) }}

@@ -48,7 +48,7 @@ class NMBPaymentService
             'merchant_id'    => $this->merchantId,
             'reference'      => $reference,
             'amount'         => number_format($booking->amount, 2, '.', ''),
-            'currency'       => $booking->currency,
+            'currency'       => AppConstant::CURRENCY_TZS,
             'description'    => 'AFCON 2027 Ticket — ' . $booking->match_name,
             'callback_url'   => config('app.url') . '/api/payments/nmb/callback',
             'redirect_url'   => config('services.nmb.redirect_url', config('app.url')),
@@ -113,13 +113,19 @@ class NMBPaymentService
             $booking->update([
                 'payment_status'   => AppConstant::PAYMENT_STATUS_PAID,
                 'payment_metadata' => $callbackData,
+                'paid_at'          => now(),
             ]);
 
             // Confirm with CAF in real-time
             try {
-                $this->cafService->confirmTicket($booking->caf_ticket_ref, $booking->transaction_id);
+                $cafResponse = $this->cafService->confirmTicket($booking->caf_ticket_ref, $booking->transaction_id);
 
-                $booking->update(['booking_status' => AppConstant::BOOKING_STATUS_CONFIRMED]);
+                $booking->update([
+                    'booking_status' => AppConstant::BOOKING_STATUS_CONFIRMED,
+                    'confirmed_at'   => now(),
+                    'ticket_pdf_url' => $cafResponse['ticket_pdf_url'] ?? $booking->ticket_pdf_url,
+                    'caf_confirmation_payload' => $cafResponse,
+                ]);
             } catch (\Throwable $e) {
                 Log::error('CAF confirmation failed after payment', [
                     'booking' => $booking->id,
@@ -237,7 +243,7 @@ class NMBPaymentService
             $this->notificationService->send(
                 $booking->user,
                 'Refund Processed',
-                'Your refund of ' . $booking->currency . ' ' . number_format($booking->amount, 2) . ' has been processed.',
+                'Your refund of ' . AppConstant::CURRENCY_TZS . ' ' . number_format($booking->amount, 2) . ' has been processed.',
                 ['type' => 'refund_processed', 'booking_id' => $booking->id]
             );
 

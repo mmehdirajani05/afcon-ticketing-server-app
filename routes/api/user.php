@@ -51,6 +51,7 @@ Route::prefix('user')->group(function () {
 
         // Bookings
         Route::get('bookings',                             [BookingController::class, 'index']);
+        Route::post('bookings',                            [BookingController::class, 'store']);
         Route::get('bookings/{booking}',                   [BookingController::class, 'show']);
         Route::get('bookings/revenue',                     [BookingController::class, 'revenue']);
 
